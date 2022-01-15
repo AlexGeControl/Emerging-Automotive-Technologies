@@ -4,8 +4,8 @@
 
 ## Reference
 
-Click [here](doc/handout.pdf) for **ChalmersX's official Handout**
-Click [here](doc/lecture_note.pdf) **Yao's personal lecture note**
+* Click [here](doc/handout.pdf) for **ChalmersX's official Handout**
+* Click [here](doc/lecture_note.pdf) **Yao's personal lecture note**
 
 ---
 
