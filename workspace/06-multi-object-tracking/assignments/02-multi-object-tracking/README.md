@@ -33,10 +33,6 @@ then evaluate their performance on both **linear** and **non-linear** simulated 
 
 ## Demo Results
 
-### Linear Benchmark
+### Non-Linear Benchmark, Low SNR
 
-<img src="doc/images/linear.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement">
-
-### Non-Linear Benchmark
-
-<img src="doc/images/nonlinear.bmp" width="100%" alt="Benchmark, Non-Linear Motion / Measurement">
+<img src="doc/images/nonlinear-low-snr.bmp" width="100%" alt="Benchmark, Non-Linear Motion / Measurement at Low SNR">
