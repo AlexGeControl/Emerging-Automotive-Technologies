@@ -320,57 +320,69 @@ classdef PMBMfilter
             %       logarithmic scale
             %       M: maximum global hypotheses kept
             
+            %
+            % get num. of measurements:
+            %
             m = size(z,2);                      %number of measurements received
-            used_meas_u = false(m,1);           %measurement indices inside the gate of undetected objects
-            nu = length(obj.paras.PPP.states);  %number of mixture components in PPP intensity
+
+            %
+            % perform gating for each mixture component in the PPP intensity
+            %
+            nu = length(obj.paras.PPP.states);  % number of mixture components in PPP intensity
             gating_matrix_u = false(m,nu);
+            used_meas_u = false(m,1);           % measurement indices inside the gate of undetected objects
             for i = 1:nu
-                %Perform gating for each mixture component in the PPP intensity
+                % identify possible measurements from current mixture component:
                 [~,gating_matrix_u(:,i)] = ...
                     obj.density.ellipsoidalGating(obj.paras.PPP.states(i),z,measmodel,gating.size);
                 used_meas_u = used_meas_u | gating_matrix_u(:,i);
             end
             
-            n_tt = length(obj.paras.MBM.tt);    %number of pre-existing hypothesis trees
-            likTable = cell(n_tt,1);            %initialise likelihood table, one for each hypothesis tree
+            %
+            % perform ellipsoidal gating for each detected object candidate in the MBM density
+            %
+            n_tt = length(obj.paras.MBM.tt);    % number of pre-existing hypothesis trees
+            likTable = cell(n_tt,1);            % initialise likelihood table, one for each hypothesis tree
             gating_matrix_d = cell(n_tt,1);
-            used_meas_d = false(m,1);           %measurement indices inside the gate of detected objects
+            used_meas_d = false(m,1);           % measurement indices inside the gate of detected objects
             for i = 1:n_tt
-                %number of local hypotheses in hypothesis tree i
+                % num. of local hypotheses for object i:
                 num_hypo = length(obj.paras.MBM.tt{i});
-                %construct gating matrix
+                % construct gating matrix:
                 gating_matrix_d{i} = false(m,num_hypo);
                 for j = 1:num_hypo
-                    %Perform gating for each local hypothesis
+                    % identify possible measurements from current detected object candidate:
                     [~,gating_matrix_d{i}(:,j)] = obj.density.ellipsoidalGating(obj.paras.MBM.tt{i}(j).state,z,measmodel,gating.size);
                     used_meas_d = used_meas_d | gating_matrix_d{i}(:,j);
                 end
             end
             
-            %measurement indices inside the gate
+            %
+            % identify qualified measurements:
+            %
+            % measurement inside the gate -- either from detected or from undetected:
             used_meas = used_meas_d | used_meas_u;
-            %find indices of measurements inside the gate of undetected
-            %objects but not detected objects
+            % measurement inside the gate of undetected objects but not inside the gate of detected objects:
             used_meas_u_not_d = used_meas > used_meas_d;
             
-            %Update detected objects
-            %obtain measurements that are inside the gate of detected objects
+            % Update detected objects
+            % obtain measurements that are inside the gate of detected objects
             z_d = z(:,used_meas_d);
             m = size(z_d,2);
             gating_matrix_d = cellfun(@(x) x(used_meas_d,:), gating_matrix_d, 'UniformOutput',false);
-            n_tt_upd = n_tt + m;                %number of hypothesis trees
-            hypoTable = cell(n_tt_upd,1);       %initialise hypothesis table, one for each hypothesis tree
+            n_tt_upd = n_tt + m;                % number of hypothesis trees
+            hypoTable = cell(n_tt_upd,1);       % initialise hypothesis table, one for each hypothesis tree
             for i = 1:n_tt
-                %number of local hypotheses in hypothesis tree i
+                % number of local hypotheses in hypothesis tree i
                 num_hypo = length(obj.paras.MBM.tt{i});
-                %initialise likelihood table for hypothesis tree i
+                % initialise likelihood table for hypothesis tree i
                 likTable{i} = -inf(num_hypo,m+1);
-                %initialise hypothesis table for hypothesis tree i
+                % initialise hypothesis table for hypothesis tree i
                 hypoTable{i} = cell(num_hypo*(m+1),1);
                 for j = 1:num_hypo
-                    %Missed detection
+                    % Missed detection
                     [hypoTable{i}{(j-1)*(m+1)+1},likTable{i}(j,1)] = Bern_undetected_update(obj,[i,j],sensormodel.P_D);
-                    %Update with measurement
+                    % Update with measurement
                     likTable{i}(j,[false;gating_matrix_d{i}(:,j)]) = ...
                         Bern_detected_update_lik(obj,[i,j],z_d(:,gating_matrix_d{i}(:,j)),measmodel,sensormodel.P_D);
                     for jj = 1:m
@@ -381,10 +393,10 @@ classdef PMBMfilter
                 end
             end
             
-            %Update undetected objects
+            % Update undetected objects
             lik_new = -inf(m,1);
             gating_matrix_ud = gating_matrix_u(used_meas_d,:);
-            %Create new hypothesis trees, one for each measurement inside
+            % Create new hypothesis trees, one for each measurement inside
             %the gate 
             for i = 1:m
                 if any(gating_matrix_ud(i,:))
@@ -480,8 +492,10 @@ classdef PMBMfilter
                 
             end
             
-            %Append new hypothesis trees that created by measurements
-            %inside the gate of undetected objects but not detected objects
+            %
+            % for all measurements that inside the gate of undetected but not inside the gate of detected
+            % append all of them into existing global hypotheses
+            %
             z_u_not_d = z(:,used_meas_u_not_d);
             num_u_not_d = size(z_u_not_d,2);
             gating_matrix_u_not_d = gating_matrix_u(used_meas_u_not_d,:);
