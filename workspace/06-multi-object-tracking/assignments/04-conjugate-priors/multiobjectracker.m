@@ -141,7 +141,7 @@ classdef multiobjectracker
             estimates = cell(K,1);
             
             %Create a class instance
-            PMBM = PMBMFilterImpl(); %PMBMfilter();
+            PMBM = PMBMfilter(); % PMBMFilterImpl(); %
             %Initialize the PMBM
             PMBM = initialize(PMBM,obj.density,birthmodel);
             

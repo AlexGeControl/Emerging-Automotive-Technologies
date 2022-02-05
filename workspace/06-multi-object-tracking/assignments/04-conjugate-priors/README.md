@@ -15,16 +15,32 @@ In this chapter we'll implement one of the state-of-art algorithms, **Poisson Mu
 
 ---
 
-## Demo Results, Linear Benchmark, High SNR
+## Demo Results, Linear Benchmark, Middle SNR
 
 ### Tracking
 
-<img src="doc/images/nonlinear--tracking.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at High SNR, Tracking">
+<img src="doc/images/linear--tracking.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at Middle SNR, Tracking">
 
 ### Birth & Death
 
-<img src="doc/images/nonlinear--birth-death.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at High SNR, Birth & Death">
+<img src="doc/images/linear--birth-death.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at Middle SNR, Birth & Death">
 
 ### GOSPR & Error Decomposition
 
-<img src="doc/images/nonlinear--GOSPA.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at High SNR, GOSPA & Decomposition">
+<img src="doc/images/linear--GOSPA.bmp" width="100%" alt="Benchmark, Linear Motion / Measurement at Middle SNR, GOSPA & Error Decomposition">
+
+---
+
+## Demo Results, Non-Linear Benchmark, Middle SNR
+
+### Tracking
+
+<img src="doc/images/nonlinear--tracking.bmp" width="100%" alt="Benchmark, Non-Linear Motion / Measurement at Middle SNR, Tracking">
+
+### Birth & Death
+
+<img src="doc/images/nonlinear--birth-death.bmp" width="100%" alt="Benchmark, Non-Linear Motion / Measurement at Middle SNR, Birth & Death">
+
+### GOSPR & Error Decomposition
+
+<img src="doc/images/nonlinear--GOSPA.bmp" width="100%" alt="Benchmark, Non-Linear Motion / Measurement at Middle SNR, GOSPA & Error Decomposition">
