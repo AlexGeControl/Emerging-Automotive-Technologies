@@ -353,245 +353,266 @@ classdef PMBMFilterImpl
             %
             % get num. of measurements:
             %
-            [~, N_z] = size(z);
-            
+            N_z = size(z,2);
+
             %
-            % perform ellipsoidal gating for possible undetected objects, 
-            % represented by PPP:
+            % perform gating for undetected objects:
             %
-            N_ppp = length(obj.paras.PPP.w);
-            I_ppp = false(N_z, N_ppp);
-            I_z_ppp = false(N_z, 1);
-            for i = 1:N_ppp
-                % get current mixture component:
-                state = obj.paras.PPP.states(i, 1);
-                
-                % get indices of measurements inside current gate:
-                [~, I_ppp(:, i)] = obj.density.ellipsoidalGating(state, z, measmodel, gating.size);
-                
-                % track all measurements inside the gate of possible
-                % undetected objects:
-                I_z_ppp = I_z_ppp | I_ppp(:, i);
+            N_u = length(obj.paras.PPP.states);
+            I_u = false(N_z,N_u);
+            I_z_u = false(N_z,1);           
+            for i = 1:N_u
+                % identify possible measurements from current undetected object:
+                [~,I_u(:,i)] = ...
+                    obj.density.ellipsoidalGating(obj.paras.PPP.states(i),z,measmodel,gating.size);
+                % track all measurements that are inside the gate of 
+                % any undetected objects:
+                I_z_u = I_z_u | I_u(:,i);
             end
             
             %
-            % perform ellipsoidal gating for possible detected objects,
-            % represented by MBM:
+            % perform gating for detected objects:
             %
-            N_ber = length(obj.paras.MBM.tt);
-            I_ber = cell(N_ber, 1);
-            I_z_ber = false(N_z, 1);
-            for i = 1:N_ber
-                % get num. of local hypotheses:
-                H_i = length(obj.paras.MBM.tt{i, 1});
-                
-                I_ber{i, 1} = false(N_z, H_i);
-                
-                for h_i = 1:H_i
-                    % get current object state:
-                    state = obj.paras.MBM.tt{i, 1}(h_i, 1).state;
-                    
-                    % get indices of measurements inside current gate:
-                    [~, I_ber{i, 1}(:, h_i)] = obj.density.ellipsoidalGating(state, z, measmodel, gating.size);
-                
-                    % track all measurements inside the gate of possible
-                    % undetected objects:
-                    I_z_ber = I_z_ber | I_ber(:, i);
+            N_d = length(obj.paras.MBM.tt);
+            L_detected = cell(N_d,1);
+            I_d = cell(N_d,1);
+            I_z_d = false(N_z,1);
+            for i = 1:N_d
+                % num. of local hypotheses for object i:
+                H_i = length(obj.paras.MBM.tt{i});
+                % construct gating matrix:
+                I_d{i} = false(N_z,H_i);
+                for j = 1:H_i
+                    % identify possible measurements from current detected object:
+                    [~,I_d{i}(:,j)] = ...
+                        obj.density.ellipsoidalGating(obj.paras.MBM.tt{i}(j).state,z,measmodel,gating.size);
+                    % track all measurements that are inside the gate of
+                    % any detected objects:
+                    I_z_d = I_z_d | I_d{i}(:,j);
                 end
             end
+
+            %
+            % identify measurements that could come from 
+            % either detected or undetected objects
+            %
+            I_z_u_and_d = I_z_u(I_z_d);
+            %
+            % identify measurements that could only come from undetected
+            % objects
+            %
+            I_z_u_not_d = (I_z_u & (~I_z_d));
             
             %
-            % process measurements from possible detected objects 
-            % as optimal assignment problem
+            % generate candidate local posterior hypotheses for detected
+            % objects
             %
-            % use only measurements from possible detected objects:
-            z_d = z(:, I_z_ber);
-            [~, N_z_d] = size(z_d);
-            I_ber = cellfun(@(x) x(I_z_ber,:), I_ber, 'UniformOutput',false);
-            % candidate posterior of detected objects:
-            tt = cell(N_ber, 1);
-            % corresponding likelihood:
-            L_detected = cell(N_ber, 1);
-            for i = 1:N_ber
-                % get num. of local hypotheses:
+            z_d = z(:,I_z_d);
+            N_z = size(z_d,2);
+            I_d = cellfun(@(x) x(I_z_d,:), I_d, 'UniformOutput',false);              
+            tt = cell(N_d+N_z,1);
+            for i = 1:N_d
+                % num. of local hypotheses for object i:
                 H_i = length(obj.paras.MBM.tt{i});
                 
-                tt{i} = cell(H_i*(1 + N_z_d), 1);
-                L_detected{i} = -Inf * ones(H_i, 1 + N_z_d);
+                % initialise likelihood table for hypothesis tree i
+                L_detected{i} = -inf(H_i,1+N_z);
+                % initialise hypothesis table for hypothesis tree i
+                tt{i} = cell(H_i*(1+N_z),1);
                 
                 for h_i = 1:H_i
+                    offset = (h_i-1)*(1+N_z);
                     tt_entry = [i, h_i];
-                    candidate_index_offset = (h_i - 1)*(1 + N_z_d);
-                    I_ber_h_i = I_ber{i, 1}(:, h_i);
                     
                     % possible miss detection:
-                    [tt{i}{candidate_index_offset + 1, 1}, ...
-                     L_detected{i}(h_i, 1)] ...
-                     = Bern_undetected_update(obj,tt_entry,sensormodel.P_D);
-                 
-                    % possible object detection:
-                    L_detected{i}(h_i, [false, I_ber_h_i']) = ...
-                        Bern_detected_update_lik(obj,tt_entry,z_d(:, I_ber_h_i),measmodel,sensormodel.P_D);
-                    for j = 1:N_z_d
-                        if I_ber_h_i(j, 1)
-                            tt{i}(candidate_index_offset + 1 + j, 1) = ...
-                                Bern_detected_update_state(obj,tt_entry,z_d(:, j),measmodel);
+                    [tt{i}{offset+1},L_detected{i}(h_i,1)] = ...
+                        Bern_undetected_update(obj,tt_entry,sensormodel.P_D);
+                    
+                    % possible object detections:
+                    L_detected{i}(h_i,[false;I_d{i}(:,h_i)]) = ...
+                        Bern_detected_update_lik(obj,tt_entry,z_d(:,I_d{i}(:,h_i)),measmodel,sensormodel.P_D);
+                    for j = 1:N_z
+                        if I_d{i}(j,h_i)
+                            tt{i}{offset+1+j} = Bern_detected_update_state(obj,tt_entry,z_d(:,j),measmodel);
                         end
                     end
                 end
             end
-            % if measurements could also come from undetected objects:
-            I_ppp_d = I_ppp(I_z_ber,:);
-            I_z_d = I_z_ppp(I_z_ber,:);
-            % corresponding likelihood:
-            L_birth = -Inf * ones(N_z_d, N_z_d);
-            for j = 1:N_z_d
-                if any(I_ppp_d(j, :))
-                    [tt{N_ber + j}, L_birth(j, j)] = ...
-                        PPP_detected_update(obj, I_ppp_d(j, :), z_d(:, j), measmodel, sensormodel.P_D, sensormodel.intensity_c);
-                else
-                    L_birth(j, j) = log(sensormodel.intensity_c);
-                end
-            end
-                        
+            
             %
-            % generate candidate posterior hypotheses:
+            % generate candidate local posterior hypotheses for new birth
+            % objects
+            %
+            L_birth = -inf(N_z,N_z);
+            I_u_and_d = I_u(I_z_d,:);
+            for j = 1:N_z
+                if any(I_u_and_d(j,:))
+                    [tt{N_d+j,1}{1}, L_birth(j,j)] = ...
+                        PPP_detected_update(obj,I_u_and_d(j,:),z_d(:,j),measmodel,sensormodel.P_D,sensormodel.intensity_c);
+                else
+                    %
+                    % for possible detected object measurements 
+                    % not inside the gate of undetected objects
+                    % set likelihood to clutter intensity
+                    %
+                    L_birth(j,j) = log(sensormodel.intensity_c);
+                end
+            end 
+            
+            %
+            % init candidate posterior hypotheses:
             %
             H_prior = length(obj.paras.MBM.w);
+            
             H_posterior = 0;
-            w = [];
-            ht = zeros(1, N_ber + N_z_d);
-            if H == 0 
-                % if there is no pre-existing global hypothesis:
+            w = [];             
+            ht = zeros(0,N_d+N_z);
+            
+            if H_prior == 0 
+                % if there is no global hypothesis:
                 H_posterior = 1;
-                w = zeros(1, 1);
-                ht = zeros(1, N_z_d);
-                ht(1, I_z_d) = 1;
+                w = 0;
+                ht = zeros(1,N_z);
+                ht(I_z_u_and_d) = 1;
             else
-                for h_prior = 1:H_prior
-                    % 
-                    % for each prior global hypothesis
-                    % generate candidate posterior hypotheses through
-                    % optimal assignment
-                    %
-                    w_prior = obj.paras.MBM.w(h_prior, 1);
-                    L_h = Inf * ones(N_z_d, N_ber + N_z_d);
+                %
+                % generate candidate posterior hypotheses from prior
+                % through optimal assignment
+                %
+                for h = 1:H_prior
+                    % init candidate posterior likelihood:
+                    w_prior = obj.paras.MBM.w(h);
                     
-                    for i = 1:N_ber
-                        h_i = obj.paras.MBM.ht(h_prior, i);
+                    % build likelihood matrix:
+                    L = inf(N_z,N_d + N_z);
+                    for i = 1:N_d
+                        h_i = obj.paras.MBM.ht(h,i);
                         if h_i > 0
-                            L_h(:, i) = -(L_detected{i}(h_i, 2:end) - L_detected{i}(h_i, 1))';
-                            w_prior = w_prior + L_detected{i}(h_i, 1);
+                            % update likelihoods from detected object:
+                            L(:,i) = -(L_detected{i}(h_i,2:end) - L_detected{i}(h_i,1));
+                            % update candidate posterior likelihood:
+                            w_prior = w_prior + L_detected{i}(h_i,1);
                         end
                     end
-                    L_h(:, (N_ber + 1):(N_ber + N_z_d)) = -L_birth;
+                    % update likelihoods from possible undetected objects:
+                    L(:, (N_d+1):(N_d+N_z)) = -L_birth;
                     
-                    if isempty(L_h)
+                    if isempty(L)
+                        %Consider the case that no measurements are inside
+                        %the gate, thus missed detection
                         w_likelihood = 0;
-                        I_assignment_h = 0;
+                        I_assignment = 0;
                     else
+                        % get M for current hypothesis:
                         M_h = ceil(exp(obj.paras.MBM.w(h)+log(M)));
+                        
                         % solve with Murty's algorithm:
-                        [I_assignment_h,~,w_likelihood] = kBest2DAssign(L_h,M_h);
+                        [I_assignment,~,w_likelihood] = ...
+                            kBest2DAssign(L,M_h);
                         % solve with Gibbs sampling:
-                        % [I_assignment_h,w_likelihood] = assign2DByGibbs(L_h,100,M_h);
+                        % [I_assignment,~,w_likelihood] = ...
+                        %   assign2DByGibbs(L,100,M_h);
                     end
                     
-                    % save candidate posterior likelihood:
-                    w = [w;w_prior - w_likelihood];
-                    
-                    % generate candidate posterior hypothesis:
-                    M_h = length(w_likelihood);
-                    ht_h = zeros(M_h,N_ber + N_z_d);
-                    for h_posterior = 1:M_h
-                        % process possible association with detected
-                        % objects:
-                        for i = 1:N_ber
-                            h_i = obj.paras.MBM.ht(h_prior, i);
+                    % extract candidate posterior hypotheses:
+                    H_posterior_h = length(w_likelihood);
+                    ht_h = zeros(H_posterior_h,N_d+N_z);
+                    for h_posterior = 1:H_posterior_h
+                        % init:
+                        ht_h(h_posterior,:) = 0;
+                        
+                        % handle possible object detections:
+                        for i = 1:N_d
+                            h_i = obj.paras.MBM.ht(h,i);
+                            offset = (h_i-1)*(1+N_z);
+                            
                             if h_i > 0
-                                candidate_index_offset = (h_i - 1)*(1 + N_z_d);
-                                j = find(I_assignment_h(:,h_posterior)==i, 1);
-                                
+                                j = find(I_assignment(:,h_posterior)==i, 1);
                                 if isempty(j)
-                                    % no object detection:
-                                    ht_h(h_posterior,i) = candidate_index_offset+1;
+                                    % get posterior from miss detection:
+                                    ht_h(h_posterior,i) = offset+1;
                                 else
-                                    % with object detection:
-                                    ht_h(h_posterior,i) = candidate_index_offset+1+j;
+                                    % get posterior from object detection:
+                                    ht_h(h_posterior,i) = offset+1+j;
                                 end
                             end
                         end
-                        % process possible association with new birth
-                        % objects:
-                        for i = (N_ber+1):(N_ber + N_z_d)
-                            j = find(I_assignment_h(:,h_posterior)==i, 1);
-                            if ~isempty(j) && I_z_d(j)
-                                % detection from new birth object:
+                        
+                        % handle possible new birth detections:
+                        for i = (N_d+1):(N_d+N_z)
+                            j = find(I_assignment(:,h_posterior)==i, 1);
+                            if ~isempty(j) && I_z_u_and_d(j)
+                                % get posterior from object birth:
                                 ht_h(h_posterior,i) = 1;
                             end
                         end
                     end
                     
-                    % update candidate posteriors:
-                    H_posterior = H_posterior + M_h;
+                    % update candidate posterior hypotheses:
+                    H_posterior = H_posterior + H_posterior_h;
+                    w = [w;w_prior-w_likelihood];
                     ht = [ht;ht_h];
                 end
-                
-                % normalize global hypothesis weights:
-                w = normalizeLogWeights(w);
             end
             
             %
-            % for all measurements that inside the gate of undetected but not inside the gate of detected
+            % for all measurements that are only inside the gate of undetected
             % append all of them into existing global hypotheses
-            % this will not change candidate posterior weights
             %
-            I_z_u = (I_ppp & (~I_ber));
-            z_u = z(:,I_z_u);
-            N_z_u = size(z_u,2);
-            I_ppp_u = I_ppp(I_z_u,:);
-            for j = 1:N_z_u
-                [tt{N_ber+N_z_d+j,1}{1}, ~] = ...
-                    PPP_detected_update(obj,I_ppp_u(j,:),z_u(:,j),measmodel,sensormodel.P_D,sensormodel.intensity_c);
+            z_u_not_d = z(:,I_z_u_not_d);
+            N_z_u_not_d = size(z_u_not_d,2);
+            I_u_not_d = I_u(I_z_u_not_d,:);
+            for i = 1:N_z_u_not_d
+                [tt{N_d+N_z+i,1}{1}, ~] = ...
+                    PPP_detected_update(obj,I_u_not_d(i,:),z_u_not_d(:,i),measmodel,sensormodel.P_D,sensormodel.intensity_c);
             end
-            ht = [ht ones(H_posterior,N_z_u)];
+            %
+            % this expansion will add a commom multiplication factor to
+            % all existing candidate posterior hypotheses
+            %
+            w = normalizeLogWeights(w);
+            ht = [ht ones(H_posterior,N_z_u_not_d)];
             
-            % update undetected objects that are still undetected:
+            % update undetected objects that stay undetected:
             obj = PPP_undetected_update(obj,sensormodel.P_D);
             
-            % prune: 
-            [w, I] = hypothesisReduction.prune(w,1:H_posterior,w_min);
-            H_posterior = length(w);
-            ht = ht(I,:);
+            % prune:
+            [w, idx] = hypothesisReduction.prune(w,1:H_posterior,w_min);
             w = normalizeLogWeights(w);
+            ht = ht(idx,:);
             
             % capping:
-            [w, I] = hypothesisReduction.cap(w,1:H_posterior,M);
-            ht = ht(I,:);
+            [w, idx] = hypothesisReduction.cap(w,1:length(w),M);
+            ht = ht(idx,:);
+            
+            % set posterior hypothesis weights:
             obj.paras.MBM.w = normalizeLogWeights(w);
             
-            % remove unused local hypotheses:
+            % remove unused objects:
             if ~isempty(ht)
-                I = sum(ht,1) >= 1;
-                ht = ht(:,I);
-                tt = tt(I);
+                idx = sum(ht,1) >= 1;
+                ht = ht(:,idx);
+                tt = tt(idx);
             end
             
-            % re-index local hypotheses:
-            N_ber = length(tt);
-            obj.paras.MBM.tt = cell(N_,1);
-            for i = 1:n_tt_upd
-                temp = ht(:,i);
-                hypoTableTemp = hypoTable{i}(unique(temp(temp~=0), 'stable'));
-                obj.paras.MBM.tt{i} = [hypoTableTemp{:}]';
+            % get num. of detected objects:
+            N_d = size(ht,2);
+            
+            % compress local hypotheses:  
+            obj.paras.MBM.tt = cell(N_d,1);
+            for i = 1:N_d
+                ht_i = ht(:,i);
+                tt_i = tt{i}(unique(ht_i(ht_i~=0), 'stable'));
+                obj.paras.MBM.tt{i} = [tt_i{:}]';
             end
             
-            %Re-index hypothesis table
-            for i = 1:n_tt_upd
-                idx = ht_upd(:,i) > 0;
-                [~,~,ht_upd(idx,i)] = unique(ht_upd(idx,i),'rows','stable');
+            % re-index global hypothesis table:
+            for i = 1:N_d
+                idx = ht(:,i) > 0;
+                [~,~,ht(idx,i)] = unique(ht(idx,i),'rows','stable');
             end
             
+            % set posterior hypothesis look-up table:
             obj.paras.MBM.ht = ht;
         end
         

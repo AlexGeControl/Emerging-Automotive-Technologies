@@ -3,7 +3,7 @@ clear all; close all; clc;
 %Choose object detection probability
 P_D = 0.98;
 %Choose clutter rate
-lambda_c = 10;
+lambda_c = 30;
 %Choose object survival probability
 P_S = 0.99;
 %Create sensor model
@@ -153,7 +153,7 @@ for k = 1:K
     assessVariableEqual('PPP_ref_w', PPP_w,'RelativeTolerance',0.0001,'Feedback','Parameter PPP.w is incorrect, please modify your code and submit again.');
     assessVariableEqual('PPP_ref_states', PPP_states,'RelativeTolerance',0.001,'Feedback','Parameter PPP.states is incorrect, please modify your code and submit again.');
     assessVariableEqual('MBM_w_ref', MBM_w,'RelativeTolerance',0.0001,'Feedback','Parameter MBM.w is incorrect, please modify your code and submit again.');
-    % assessVariableEqual('MBM_tt_ref', MBM_tt,'RelativeTolerance',0.001,'Feedback','Parameter MBM.tt is incorrect, please modify your code and submit again.');
+    assessVariableEqual('MBM_tt_ref', MBM_tt,'RelativeTolerance',0.001,'Feedback','Parameter MBM.tt is incorrect, please modify your code and submit again.');
 end
 
 
